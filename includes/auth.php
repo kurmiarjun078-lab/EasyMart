@@ -1,5 +1,6 @@
 <?php
 
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -37,6 +38,40 @@ function getCurrentUserName()
 function getCurrentUserEmail()
 {
     return $_SESSION["user_email"] ?? "";
+}
+
+/* =========================
+   ADMIN AUTHENTICATION
+   ========================= */
+
+function isAdminLoggedIn()
+{
+    return isset($_SESSION["admin_logged_in"]) &&
+           $_SESSION["admin_logged_in"] === true &&
+           isset($_SESSION["admin_id"]);
+}
+
+function require_admin_login()
+{
+    if (!isAdminLoggedIn()) {
+        header("Location: ../admin/login.php");
+        exit;
+    }
+}
+
+function getAdminId()
+{
+    return $_SESSION["admin_id"] ?? null;
+}
+
+function getAdminName()
+{
+    return $_SESSION["admin_name"] ?? "Admin";
+}
+
+function getAdminEmail()
+{
+    return $_SESSION["admin_email"] ?? "";
 }
 
 ?>

@@ -1,47 +1,141 @@
 <?php
 
-$conn = require_once "includes/db.php";
-require_once "includes/auth.php";
+require_once __DIR__ . "/includes/db.php";
+require_once __DIR__ . "/includes/auth.php";
 
+$productId = isset($_GET["id"]) ? (int) $_GET["id"] : 0;
 
-// Check product ID
-
-if (!isset($_GET["id"]) || !is_numeric($_GET["id"])) {
-
+if ($productId <= 0) {
     header("Location: shop.php");
     exit;
-
 }
 
-$product_id = (int) $_GET["id"];
+/* =========================
+   ADD TO WISHLIST
+========================= */
+if (isset($_GET["wishlist"]) && $_GET["wishlist"] === "add") {
+
+    if (!isLoggedIn()) {
+        header("Location: login.php");
+        exit;
+    }
+
+    $userId = getCurrentUserId();
+
+    // Check product exists
+    $stmt = mysqli_prepare(
+        $conn,
+        "SELECT id FROM products 
+         WHERE id = ? AND status = 'active' 
+         LIMIT 1"
+    );
+
+    mysqli_stmt_bind_param($stmt, "i", $productId);
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
+    $product = mysqli_fetch_assoc($result);
+
+    mysqli_stmt_close($stmt);
+
+    if ($product) {
+
+        // Check already in wishlist
+        $stmt = mysqli_prepare(
+            $conn,
+            "SELECT id FROM wishlist 
+             WHERE user_id = ? AND product_id = ? 
+             LIMIT 1"
+        );
+
+        mysqli_stmt_bind_param($stmt, "ii", $userId, $productId);
+        mysqli_stmt_execute($stmt);
+
+        $result = mysqli_stmt_get_result($stmt);
+        $exists = mysqli_fetch_assoc($result);
+
+        mysqli_stmt_close($stmt);
+
+        // Add only if not already present
+        if (!$exists) {
+
+            $stmt = mysqli_prepare(
+                $conn,
+                "INSERT INTO wishlist (user_id, product_id)
+                 VALUES (?, ?)"
+            );
+
+            mysqli_stmt_bind_param($stmt, "ii", $userId, $productId);
+            mysqli_stmt_execute($stmt);
+            mysqli_stmt_close($stmt);
+        }
+    }
+
+    // Redirect back to product page
+    header("Location: product.php?id=" . $productId . "&wishlist=added");
+    exit;
+}
 
 
-// Fetch product
+/* =========================
+   GET PRODUCT
+========================= */
 
 $stmt = mysqli_prepare(
     $conn,
-    "SELECT products.*, categories.name AS category_name
+    "SELECT 
+        products.*,
+        categories.name AS category_name
      FROM products
-     INNER JOIN categories
-     ON products.category_id = categories.id
+     INNER JOIN categories 
+        ON products.category_id = categories.id
      WHERE products.id = ?
-     AND products.status = 'active'"
+       AND products.status = 'active'
+     LIMIT 1"
 );
 
-mysqli_stmt_bind_param($stmt, "i", $product_id);
-
+mysqli_stmt_bind_param($stmt, "i", $productId);
 mysqli_stmt_execute($stmt);
 
 $result = mysqli_stmt_get_result($stmt);
-
 $product = mysqli_fetch_assoc($result);
 
+mysqli_stmt_close($stmt);
 
 if (!$product) {
-
     header("Location: shop.php");
     exit;
+}
 
+
+/* =========================
+   CHECK WISHLIST STATUS
+========================= */
+
+$inWishlist = false;
+
+if (isLoggedIn()) {
+
+    $userId = getCurrentUserId();
+
+    $stmt = mysqli_prepare(
+        $conn,
+        "SELECT id 
+         FROM wishlist 
+         WHERE user_id = ? AND product_id = ?
+         LIMIT 1"
+    );
+
+    mysqli_stmt_bind_param($stmt, "ii", $userId, $productId);
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
+
+    if (mysqli_fetch_assoc($result)) {
+        $inWishlist = true;
+    }
+
+    mysqli_stmt_close($stmt);
 }
 
 ?>
@@ -53,15 +147,11 @@ if (!$product) {
 
     <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>
-        <?php echo htmlspecialchars($product["name"]); ?> - EasyMart
+        <?= htmlspecialchars($product["name"]) ?> - EasyMart
     </title>
-
 
     <link
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
@@ -73,19 +163,59 @@ if (!$product) {
         href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
     >
 
+    <style>
+
+        body {
+            background: #f8f9fa;
+        }
+
+        .product-image {
+            width: 100%;
+            height: 450px;
+            object-fit: contain;
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .product-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        }
+
+        .price {
+            font-size: 30px;
+            font-weight: bold;
+        }
+
+        .old-price {
+            text-decoration: line-through;
+            color: #888;
+            font-size: 20px;
+        }
+
+        .category-badge {
+            font-size: 14px;
+        }
+
+    </style>
+
 </head>
 
-<body class="bg-light">
+<body>
 
 
-<!-- ================= NAVBAR ================= -->
+<!-- =========================
+     NAVBAR
+========================= -->
 
 <nav class="navbar navbar-expand-lg bg-white shadow-sm sticky-top">
 
     <div class="container">
 
-        <a class="navbar-brand text-primary fw-bold"
-           href="index.php">
+        <a class="navbar-brand fw-bold text-primary" href="index.php">
 
             <i class="bi bi-cart-check-fill"></i>
             EasyMart
@@ -97,7 +227,7 @@ if (!$product) {
             class="navbar-toggler"
             type="button"
             data-bs-toggle="collapse"
-            data-bs-target="#navbarMenu"
+            data-bs-target="#navbarNav"
         >
 
             <span class="navbar-toggler-icon"></span>
@@ -105,19 +235,14 @@ if (!$product) {
         </button>
 
 
-        <div class="collapse navbar-collapse"
-             id="navbarMenu">
+        <div class="collapse navbar-collapse" id="navbarNav">
 
-            <ul class="navbar-nav ms-auto align-items-lg-center">
+            <ul class="navbar-nav ms-auto">
 
                 <li class="nav-item">
 
-                    <a class="nav-link"
-                       href="index.php">
-
-                        <i class="bi bi-house-door"></i>
+                    <a class="nav-link" href="index.php">
                         Home
-
                     </a>
 
                 </li>
@@ -125,12 +250,8 @@ if (!$product) {
 
                 <li class="nav-item">
 
-                    <a class="nav-link"
-                       href="shop.php">
-
-                        <i class="bi bi-shop"></i>
+                    <a class="nav-link" href="shop.php">
                         Shop
-
                     </a>
 
                 </li>
@@ -138,8 +259,16 @@ if (!$product) {
 
                 <li class="nav-item">
 
-                    <a class="nav-link"
-                       href="cart.php">
+                    <a class="nav-link" href="category.php">
+                        Categories
+                    </a>
+
+                </li>
+
+
+                <li class="nav-item">
+
+                    <a class="nav-link" href="cart.php">
 
                         <i class="bi bi-cart"></i>
                         Cart
@@ -151,8 +280,7 @@ if (!$product) {
 
                 <li class="nav-item">
 
-                    <a class="nav-link"
-                       href="wishlist.php">
+                    <a class="nav-link" href="wishlist.php">
 
                         <i class="bi bi-heart"></i>
                         Wishlist
@@ -166,16 +294,10 @@ if (!$product) {
 
                     <li class="nav-item">
 
-                        <a class="nav-link"
-                           href="profile.php">
+                        <a class="nav-link" href="profile.php">
 
-                            <i class="bi bi-person-circle text-primary"></i>
-
-                            <?php
-                            echo htmlspecialchars(
-                                getCurrentUserName()
-                            );
-                            ?>
+                            <i class="bi bi-person-circle"></i>
+                            Profile
 
                         </a>
 
@@ -184,8 +306,7 @@ if (!$product) {
 
                     <li class="nav-item">
 
-                        <a class="nav-link text-danger"
-                           href="logout.php">
+                        <a class="nav-link text-danger" href="logout.php">
 
                             <i class="bi bi-box-arrow-right"></i>
                             Logout
@@ -198,12 +319,8 @@ if (!$product) {
 
                     <li class="nav-item">
 
-                        <a class="nav-link"
-                           href="login.php">
-
-                            <i class="bi bi-person"></i>
+                        <a class="nav-link" href="login.php">
                             Login
-
                         </a>
 
                     </li>
@@ -211,12 +328,8 @@ if (!$product) {
 
                     <li class="nav-item">
 
-                        <a class="btn btn-primary btn-sm ms-lg-2"
-                           href="register.php">
-
-                            <i class="bi bi-person-plus"></i>
+                        <a class="nav-link" href="register.php">
                             Register
-
                         </a>
 
                     </li>
@@ -232,36 +345,56 @@ if (!$product) {
 </nav>
 
 
-<!-- ================= PRODUCT DETAILS ================= -->
+
+<!-- =========================
+     PRODUCT DETAILS
+========================= -->
 
 <div class="container py-5">
 
-    <div class="row g-5">
+    <?php if (isset($_GET["wishlist"]) && $_GET["wishlist"] === "added"): ?>
+
+        <div class="alert alert-success">
+
+            <i class="bi bi-heart-fill"></i>
+
+            Product added to your wishlist successfully.
+
+        </div>
+
+    <?php endif; ?>
 
 
-        <!-- Product Image -->
+    <div class="row g-4">
+
+
+        <!-- PRODUCT IMAGE -->
 
         <div class="col-md-6">
 
-            <div class="card border-0 shadow-sm">
+            <div class="product-card">
 
                 <?php if (!empty($product["image"])): ?>
 
                     <img
-                        src="assets/images/<?php echo htmlspecialchars($product["image"]); ?>"
-                        class="img-fluid rounded"
-                        style="width:100%; height:450px; object-fit:cover;"
-                        alt="<?php echo htmlspecialchars($product["name"]); ?>"
+                        src="assets/images/<?= htmlspecialchars($product["image"]) ?>"
+                        alt="<?= htmlspecialchars($product["name"]) ?>"
+                        class="product-image"
                     >
 
                 <?php else: ?>
 
                     <div
-                        class="d-flex align-items-center justify-content-center bg-light"
-                        style="height:450px;"
+                        class="product-image d-flex align-items-center justify-content-center"
                     >
 
-                        <i class="bi bi-image fs-1 text-secondary"></i>
+                        <div class="text-center text-muted">
+
+                            <i class="bi bi-image fs-1"></i>
+
+                            <p>No Image Available</p>
+
+                        </div>
 
                     </div>
 
@@ -272,196 +405,190 @@ if (!$product) {
         </div>
 
 
-        <!-- Product Information -->
+
+        <!-- PRODUCT INFORMATION -->
 
         <div class="col-md-6">
 
+            <div class="product-card h-100">
 
-            <!-- Category -->
+                <span class="badge bg-primary category-badge mb-3">
 
-            <span class="badge bg-primary mb-3">
-
-                <?php
-                echo htmlspecialchars(
-                    $product["category_name"]
-                );
-                ?>
-
-            </span>
-
-
-            <!-- Product Name -->
-
-            <h1 class="fw-bold">
-
-                <?php
-                echo htmlspecialchars(
-                    $product["name"]
-                );
-                ?>
-
-            </h1>
-
-
-            <!-- Description -->
-
-            <p class="text-muted mt-3">
-
-                <?php
-                echo nl2br(
-                    htmlspecialchars(
-                        $product["description"]
-                    )
-                );
-                ?>
-
-            </p>
-
-
-            <!-- Price -->
-
-            <div class="my-4">
-
-                <span class="fs-2 fw-bold text-success">
-
-                    ₹<?php
-                    echo number_format(
-                        $product["price"],
-                        2
-                    );
-                    ?>
+                    <?= htmlspecialchars($product["category_name"]) ?>
 
                 </span>
 
 
-                <?php if (!empty($product["old_price"])): ?>
+                <h1 class="fw-bold mb-3">
 
-                    <del class="fs-5 text-muted ms-3">
+                    <?= htmlspecialchars($product["name"]) ?>
 
-                        ₹<?php
-                        echo number_format(
-                            $product["old_price"],
-                            2
-                        );
-                        ?>
+                </h1>
 
-                    </del>
+
+                <div class="mb-3">
+
+                    <span class="price text-success">
+
+                        ₹<?= number_format($product["price"], 2) ?>
+
+                    </span>
+
+
+                    <?php if (!empty($product["old_price"])): ?>
+
+                        <span class="old-price ms-3">
+
+                            ₹<?= number_format($product["old_price"], 2) ?>
+
+                        </span>
+
+                    <?php endif; ?>
+
+                </div>
+
+
+                <!-- STOCK -->
+
+                <?php if ($product["stock"] > 0): ?>
+
+                    <p class="text-success">
+
+                        <i class="bi bi-check-circle-fill"></i>
+
+                        In Stock:
+                        <?= (int) $product["stock"] ?>
+
+                    </p>
+
+                <?php else: ?>
+
+                    <p class="text-danger fw-bold">
+
+                        <i class="bi bi-x-circle-fill"></i>
+
+                        Out of Stock
+
+                    </p>
 
                 <?php endif; ?>
 
-            </div>
+
+                <hr>
 
 
-            <!-- Stock -->
+                <!-- DESCRIPTION -->
 
-            <?php if ($product["stock"] > 0): ?>
+                <h5 class="fw-bold">
+                    Product Description
+                </h5>
 
-                <p class="text-success">
+                <p class="text-muted">
 
-                    <i class="bi bi-check-circle-fill"></i>
-
-                    <?php echo $product["stock"]; ?>
-                    items available
-
-                </p>
-
-            <?php else: ?>
-
-                <p class="text-danger">
-
-                    <i class="bi bi-x-circle-fill"></i>
-
-                    Out of Stock
+                    <?= nl2br(htmlspecialchars($product["description"] ?? "")) ?>
 
                 </p>
 
-            <?php endif; ?>
+
+                <hr>
 
 
-            <!-- Quantity -->
+                <!-- BUTTONS -->
 
-            <?php if ($product["stock"] > 0): ?>
-
-                <form
-                    action="add_to_cart.php"
-                    method="POST"
-                    class="mt-4"
-                >
-
-                    <input
-                        type="hidden"
-                        name="product_id"
-                        value="<?php echo $product["id"]; ?>"
-                    >
+                <div class="d-flex flex-wrap gap-2">
 
 
-                    <label class="form-label fw-semibold">
+                    <?php if ($product["stock"] > 0): ?>
 
-                        Quantity
+                        <a
+                            href="add_to_cart.php?id=<?= $product["id"] ?>"
+                            class="btn btn-primary btn-lg"
+                        >
 
-                    </label>
+                            <i class="bi bi-cart-plus"></i>
 
+                            Add to Cart
 
-                    <div
-                        class="input-group mb-3"
-                        style="max-width:180px;"
-                    >
+                        </a>
+
+                    <?php else: ?>
 
                         <button
-                            type="button"
-                            class="btn btn-outline-secondary"
-                            onclick="decreaseQty()"
+                            class="btn btn-secondary btn-lg"
+                            disabled
                         >
-                            −
+
+                            <i class="bi bi-cart-x"></i>
+
+                            Out of Stock
+
                         </button>
 
+                    <?php endif; ?>
 
-                        <input
-                            type="number"
-                            name="quantity"
-                            id="quantity"
-                            class="form-control text-center"
-                            value="1"
-                            min="1"
-                            max="<?php echo $product["stock"]; ?>"
+
+                    <!-- WISHLIST BUTTON -->
+
+                    <?php if (isLoggedIn()): ?>
+
+                        <?php if ($inWishlist): ?>
+
+                            <a
+                                href="wishlist.php"
+                                class="btn btn-danger btn-lg"
+                            >
+
+                                <i class="bi bi-heart-fill"></i>
+
+                                In Wishlist
+
+                            </a>
+
+                        <?php else: ?>
+
+                            <a
+                                href="product.php?id=<?= $product["id"] ?>&wishlist=add"
+                                class="btn btn-outline-danger btn-lg"
+                            >
+
+                                <i class="bi bi-heart"></i>
+
+                                Add to Wishlist
+
+                            </a>
+
+                        <?php endif; ?>
+
+                    <?php else: ?>
+
+                        <a
+                            href="login.php"
+                            class="btn btn-outline-danger btn-lg"
                         >
 
+                            <i class="bi bi-heart"></i>
 
-                        <button
-                            type="button"
-                            class="btn btn-outline-secondary"
-                            onclick="increaseQty()"
-                        >
-                            +
-                        </button>
+                            Add to Wishlist
 
-                    </div>
+                        </a>
 
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary btn-lg"
-                    >
-
-                        <i class="bi bi-cart-plus"></i>
-
-                        Add to Cart
-
-                    </button>
+                    <?php endif; ?>
 
 
                     <a
                         href="shop.php"
-                        class="btn btn-outline-secondary btn-lg ms-2"
+                        class="btn btn-outline-secondary btn-lg"
                     >
 
-                        Continue Shopping
+                        <i class="bi bi-arrow-left"></i>
+
+                        Back to Shop
 
                     </a>
 
-                </form>
+                </div>
 
-            <?php endif; ?>
+            </div>
 
         </div>
 
@@ -470,41 +597,27 @@ if (!$product) {
 </div>
 
 
-<script>
 
-function decreaseQty()
-{
-    let quantity = document.getElementById("quantity");
+<!-- =========================
+     FOOTER
+========================= -->
 
-    let value = parseInt(quantity.value);
+<footer class="bg-dark text-white text-center py-4 mt-5">
 
-    if (value > 1)
-    {
-        quantity.value = value - 1;
-    }
-}
+    <p class="mb-0">
 
+        © <?= date("Y") ?> EasyMart.
+        All Rights Reserved.
 
-function increaseQty()
-{
-    let quantity = document.getElementById("quantity");
+    </p>
 
-    let max = parseInt(quantity.max);
-
-    let value = parseInt(quantity.value);
-
-    if (value < max)
-    {
-        quantity.value = value + 1;
-    }
-}
-
-</script>
+</footer>
 
 
 <script
-    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
-</script>
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+></script>
 
 </body>
+
 </html>
