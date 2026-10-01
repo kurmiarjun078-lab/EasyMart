@@ -1,6 +1,6 @@
 <?php
 
-$conn = require_once "includes/db.php";
+require_once "includes/db.php";
 require_once "includes/auth.php";
 
 
@@ -388,42 +388,55 @@ if ($search !== "") {
                 <?php if (isLoggedIn()): ?>
 
 
-                    <!-- PROFILE -->
-
-                    <li class="nav-item">
+                    <li class="nav-item dropdown">
 
                         <a
-                            class="nav-link d-flex align-items-center gap-1"
-                            href="profile.php"
+                            class="nav-link dropdown-toggle d-flex align-items-center gap-1"
+                            href="#"
+                            role="button"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
                         >
 
-                            <i
-                                class="bi bi-person-circle fs-5 text-primary"
-                            ></i>
+                            <i class="bi bi-person-circle fs-5 text-primary"></i>
 
-                            <?= htmlspecialchars(
-                                getCurrentUserName()
-                            ) ?>
+                            <?= htmlspecialchars(getCurrentUserName()) ?>
 
                         </a>
 
-                    </li>
+                        <ul class="dropdown-menu dropdown-menu-end">
 
+                            <li>
+                                <a class="dropdown-item" href="profile.php">
+                                    <i class="bi bi-person"></i>
+                                    Profile
+                                </a>
+                            </li>
 
-                    <!-- LOGOUT -->
+                            <li>
+                                <a class="dropdown-item" href="orders.php">
+                                    <i class="bi bi-box-seam"></i>
+                                    My Orders
+                                </a>
+                            </li>
 
-                    <li class="nav-item">
+                            <li>
+                                <a class="dropdown-item" href="wishlist.php">
+                                    <i class="bi bi-heart"></i>
+                                    Wishlist
+                                </a>
+                            </li>
 
-                        <a
-                            class="nav-link text-danger"
-                            href="logout.php"
-                        >
+                            <li><hr class="dropdown-divider"></li>
 
-                            <i class="bi bi-box-arrow-right"></i>
+                            <li>
+                                <a class="dropdown-item text-danger" href="logout.php">
+                                    <i class="bi bi-box-arrow-right"></i>
+                                    Logout
+                                </a>
+                            </li>
 
-                            Logout
-
-                        </a>
+                        </ul>
 
                     </li>
 

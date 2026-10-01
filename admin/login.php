@@ -1,7 +1,12 @@
 <?php
 
 session_start();
-require_once "../includes/db.php";
+
+require_once __DIR__ . "/../includes/db.php";
+
+if (!isset($conn) || !($conn instanceof mysqli)) {
+    die("Database connection failed.");
+}
 
 $error = "";
 
@@ -11,40 +16,88 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $password = $_POST["password"] ?? "";
 
     if ($email === "" || $password === "") {
+
         $error = "Please enter email and password.";
+
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+
+        $error = "Please enter a valid email address.";
+
     } else {
 
-        $stmt = mysqli_prepare(
-            $conn,
-            "SELECT id, name, email, password FROM admins WHERE email = ? LIMIT 1"
-        );
+        $sql = "
+            SELECT id, name, email, password
+            FROM admins
+            WHERE email = ?
+            LIMIT 1
+        ";
 
-        mysqli_stmt_bind_param($stmt, "s", $email);
-        mysqli_stmt_execute($stmt);
+        $stmt = mysqli_prepare($conn, $sql);
 
-        $result = mysqli_stmt_get_result($stmt);
+        if (!$stmt) {
 
-        if ($admin = mysqli_fetch_assoc($result)) {
-
-            if (password_verify($password, $admin["password"])) {
-
-                $_SESSION["admin_logged_in"] = true;
-                $_SESSION["admin_id"] = $admin["id"];
-                $_SESSION["admin_name"] = $admin["name"];
-                $_SESSION["admin_email"] = $admin["email"];
-
-                header("Location: dashboard.php");
-                exit;
-
-            } else {
-                $error = "Invalid email or password.";
-            }
+            $error = "Database query failed: " . mysqli_error($conn);
 
         } else {
-            $error = "Invalid email or password.";
-        }
 
-        mysqli_stmt_close($stmt);
+            mysqli_stmt_bind_param($stmt, "s", $email);
+
+            if (!mysqli_stmt_execute($stmt)) {
+
+                $error = "Query execution failed.";
+
+            } else {
+
+                mysqli_stmt_store_result($stmt);
+
+                if (mysqli_stmt_num_rows($stmt) === 1) {
+
+                    mysqli_stmt_bind_result(
+                        $stmt,
+                        $admin_id,
+                        $admin_name,
+                        $admin_email,
+                        $admin_password
+                    );
+
+                    mysqli_stmt_fetch($stmt);
+
+                    /*
+                     * Check that password column contains
+                     * a valid password hash.
+                     */
+
+                    if (
+                        !empty($admin_password) &&
+                        is_string($admin_password) &&
+                        password_verify($password, $admin_password)
+                    ) {
+
+                        session_regenerate_id(true);
+
+                        $_SESSION["admin_logged_in"] = true;
+                        $_SESSION["admin_id"] = $admin_id;
+                        $_SESSION["admin_name"] = $admin_name;
+                        $_SESSION["admin_email"] = $admin_email;
+
+                        header("Location: dashboard.php");
+                        exit;
+
+                    } else {
+
+                        $error = "Invalid email or password.";
+
+                    }
+
+                } else {
+
+                    $error = "No admin account found with this email.";
+
+                }
+            }
+
+            mysqli_stmt_close($stmt);
+        }
     }
 }
 
@@ -54,145 +107,290 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>Admin Login - EasyMart</title>
 
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+    >
+
     <style>
-        * {
-            box-sizing: border-box;
-        }
 
         body {
             margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(
+                135deg,
+                #0d6efd,
+                #6610f2
+            );
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
             font-family: Arial, sans-serif;
-            background: #f4f6f9;
         }
 
-        .login-container {
+        .login-card {
+
             width: 100%;
-            max-width: 420px;
-            margin: 100px auto;
+            max-width: 430px;
+
             background: white;
-            padding: 35px;
-            border-radius: 12px;
-            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.12);
+
+            border-radius: 16px;
+
+            overflow: hidden;
+
+            box-shadow:
+                0 15px 40px rgba(0,0,0,0.20);
         }
 
-        h1 {
+        .login-header {
+
+            background: #0d6efd;
+
+            color: white;
+
             text-align: center;
-            margin-bottom: 10px;
+
+            padding: 30px;
         }
 
-        .subtitle {
-            text-align: center;
-            color: #777;
-            margin-bottom: 25px;
+        .login-header i {
+
+            font-size: 55px;
         }
 
-        .form-group {
-            margin-bottom: 18px;
-        }
+        .login-header h2 {
 
-        label {
-            display: block;
-            margin-bottom: 7px;
+            margin-top: 10px;
+
             font-weight: bold;
         }
 
-        input {
-            width: 100%;
+        .login-body {
+
+            padding: 35px;
+        }
+
+        .form-control {
+
             padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            font-size: 15px;
         }
 
-        button {
-            width: 100%;
+        .btn-login {
+
             padding: 12px;
-            border: none;
-            border-radius: 6px;
-            background: #0d6efd;
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
+
+            font-size: 17px;
+
+            font-weight: bold;
         }
 
-        button:hover {
-            background: #0b5ed7;
-        }
-
-        .error {
-            background: #f8d7da;
-            color: #842029;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 18px;
-        }
-
-        .back {
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        .back a {
-            color: #0d6efd;
-            text-decoration: none;
-        }
     </style>
+
 </head>
 
 <body>
 
-<div class="login-container">
+<div class="login-card">
 
-    <h1>EasyMart Admin</h1>
 
-    <p class="subtitle">Admin Login</p>
+    <!-- HEADER -->
 
-    <?php if ($error !== ""): ?>
-        <div class="error">
-            <?= htmlspecialchars($error) ?>
-        </div>
-    <?php endif; ?>
+    <div class="login-header">
 
-    <form method="POST">
+        <i class="bi bi-shield-lock-fill"></i>
 
-        <div class="form-group">
-            <label>Email</label>
+        <h2>Admin Login</h2>
 
-            <input
-                type="email"
-                name="email"
-                placeholder="Enter admin email"
-                required
+        <p class="mb-0">
+            EasyMart Administration
+        </p>
+
+    </div>
+
+
+    <!-- BODY -->
+
+    <div class="login-body">
+
+
+        <?php if ($error !== ""): ?>
+
+            <div class="alert alert-danger">
+
+                <i class="bi bi-exclamation-circle"></i>
+
+                <?= htmlspecialchars($error) ?>
+
+            </div>
+
+        <?php endif; ?>
+
+
+        <form method="POST">
+
+
+            <!-- EMAIL -->
+
+            <div class="mb-3">
+
+                <label class="form-label fw-bold">
+
+                    Email
+
+                </label>
+
+                <div class="input-group">
+
+                    <span class="input-group-text">
+
+                        <i class="bi bi-envelope"></i>
+
+                    </span>
+
+                    <input
+                        type="email"
+                        name="email"
+                        class="form-control"
+                        placeholder="Enter admin email"
+                        value="<?= htmlspecialchars($_POST["email"] ?? "") ?>"
+                        required
+                    >
+
+                </div>
+
+            </div>
+
+
+            <!-- PASSWORD -->
+
+            <div class="mb-4">
+
+                <label class="form-label fw-bold">
+
+                    Password
+
+                </label>
+
+                <div class="input-group">
+
+                    <span class="input-group-text">
+
+                        <i class="bi bi-lock"></i>
+
+                    </span>
+
+                    <input
+                        type="password"
+                        name="password"
+                        id="password"
+                        class="form-control"
+                        placeholder="Enter admin password"
+                        required
+                    >
+
+                    <button
+                        type="button"
+                        class="btn btn-outline-secondary"
+                        onclick="togglePassword()"
+                    >
+
+                        <i
+                            class="bi bi-eye"
+                            id="eyeIcon"
+                        ></i>
+
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <!-- LOGIN -->
+
+            <button
+                type="submit"
+                class="btn btn-primary w-100 btn-login"
             >
-        </div>
 
-        <div class="form-group">
-            <label>Password</label>
+                <i class="bi bi-box-arrow-in-right"></i>
 
-            <input
-                type="password"
-                name="password"
-                placeholder="Enter password"
-                required
+                Login
+
+            </button>
+
+        </form>
+
+
+        <div class="text-center mt-4">
+
+            <a
+                href="../index.php"
+                class="text-decoration-none"
             >
+
+                ← Back to EasyMart
+
+            </a>
+
         </div>
 
-        <button type="submit">
-            Login
-        </button>
-
-    </form>
-
-    <div class="back">
-        <a href="../index.php">← Back to EasyMart</a>
     </div>
 
 </div>
 
+
+<script>
+
+function togglePassword() {
+
+    const password =
+        document.getElementById("password");
+
+    const eyeIcon =
+        document.getElementById("eyeIcon");
+
+
+    if (password.type === "password") {
+
+        password.type = "text";
+
+        eyeIcon.classList.remove("bi-eye");
+
+        eyeIcon.classList.add("bi-eye-slash");
+
+    } else {
+
+        password.type = "password";
+
+        eyeIcon.classList.remove("bi-eye-slash");
+
+        eyeIcon.classList.add("bi-eye");
+
+    }
+
+}
+
+</script>
+
 </body>
+
 </html>
