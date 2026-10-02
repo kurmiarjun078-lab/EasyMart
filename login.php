@@ -172,7 +172,30 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     |--------------------------------------------------------------------------
                     */
 
-                    if (password_verify($password, $userPassword)) {
+                    $storedPassword = (string) $userPassword;
+                    $passwordInfo = password_get_info($storedPassword);
+                    $isLegacyPassword = empty($passwordInfo["algo"]);
+                    $passwordMatches = password_verify($password, $storedPassword);
+ 
+                    if (!$passwordMatches && $isLegacyPassword) {
+                        $passwordMatches = hash_equals($storedPassword, $password);
+                    }
+
+                    if ($passwordMatches) {
+
+                        if ($isLegacyPassword) {
+                            $newPasswordHash = password_hash($password, PASSWORD_DEFAULT);
+                            $updateStmt = mysqli_prepare(
+                                $conn,
+                                "UPDATE users SET password = ? WHERE id = ?"
+                            );
+
+                            if ($updateStmt !== false) {
+                                mysqli_stmt_bind_param($updateStmt, "si", $newPasswordHash, $userId);
+                                mysqli_stmt_execute($updateStmt);
+                                mysqli_stmt_close($updateStmt);
+                            }
+                        }
 
 
                         /*
